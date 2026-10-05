@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
+from typing import Any
+
 class MatchStatus(Enum):
     NOT_STARTED = auto()
     IN_PROGRESS = auto()
     FINISHED = auto()
+
 
 class AbstractMatchEngine(ABC):
 
@@ -16,4 +19,34 @@ class AbstractMatchEngine(ABC):
         
     @abstractmethod
     def add_point(self, player_index: int) -> None:
+        """Добавление очка игроку по индексу (0 или 1)"""                     
         ...
+    
+    @abstractmethod
+    def start_match(self, player1: str, player2: str) -> None:
+        """Начало матча с указанием имен игроков"""
+        ...
+    
+    @abstractmethod
+    def get_score(self) -> dict[str, Any]:
+        """Получение текущего счета матча"""
+        ...
+
+    def is_match_over(self) -> bool:
+        """Проверка завершения матча"""
+        return self.status == MatchStatus.FINISHED
+
+    def get_winner(self) -> int | None:
+        """Получение победителя матча"""
+        return self.winner
+
+    def force_end(self) -> None:
+        """Принудительное завершение матча"""
+        self.status = MatchStatus.FINISHED
+
+    def reset(self) -> None:
+        """Сброс состояния матча"""
+        self.status = MatchStatus.NOT_STARTED
+        self.players = ("", "")
+        self.current_server = 0
+        self.winner = None
