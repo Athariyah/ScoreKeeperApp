@@ -13,9 +13,9 @@ class AbstractMatchEngine(ABC):
     def __init__(self, sport_name: str) -> None:
         self.status = MatchStatus.NOT_STARTED
         self.sport_name = sport_name
-        self.current_server = 0
         self.winner = None
         self.players = ("", "")
+        self.set_server()
         
     @abstractmethod
     def add_point(self, player_index: int) -> None:
@@ -52,4 +52,5 @@ class AbstractMatchEngine(ABC):
         self.winner = None
         
     def set_server(self, server_index: int) -> None:
+        """Поменять кто подаёт"""
         self.current_server = server_index
