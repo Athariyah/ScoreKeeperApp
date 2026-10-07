@@ -50,3 +50,6 @@ class AbstractMatchEngine(ABC):
         self.players = ("", "")
         self.current_server = 0
         self.winner = None
+        
+    def set_server(self, server_index: int) -> None:
+        self.current_server = server_index
