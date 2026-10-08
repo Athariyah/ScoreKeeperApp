@@ -18,11 +18,11 @@ class VolleyballEngine(AbstractMatchEngine):
     def add_point(self, player_index: int) -> None:
         self.current_set_points[player_index] += 1
         
-    def start_match(self, player1: str, player2: str) -> None:
+    def start_match(self, player1: str, player2: str, server_in) -> None:
         self.status = MatchStatus.IN_PROGRESS
         self.current_server = 0
         self.current_set = 1
-        self.current_set_point = [0, 0]
+        self.current_set_points = [0, 0]
         self.sets_won = [0, 0]
         self.winner = None
         self.players = (player1, player2)

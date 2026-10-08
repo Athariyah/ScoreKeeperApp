@@ -23,7 +23,7 @@ class AbstractMatchEngine(ABC):
         ...
     
     @abstractmethod
-    def start_match(self, player1: str, player2: str) -> None:
+    def start_match(self, player1: str, player2: str, server_index: int) -> None:
         """Начало матча с указанием имен игроков"""
         ...
     
