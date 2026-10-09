@@ -15,7 +15,7 @@ class AbstractMatchEngine(ABC):
         self.sport_name = sport_name
         self.winner = None
         self.players = ("", "")
-        self.set_server()
+        self.current_server = 0
         
     @abstractmethod
     def add_point(self, player_index: int) -> None:
