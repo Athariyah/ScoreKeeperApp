@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 
 from backend.src.api.routes import router as match_router
+from backend.src.api.websocket import websocket_endpoint
 
 
 app = FastAPI(title= "ScoreKeeperApp API")
 app.include_router(match_router)
+app.websocket("/ws/test")(websocket_endpoint)
 
 @app.get("/")
 def root():
