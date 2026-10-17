@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from backend.src.api.routes import router as match_router
-from backend.src.api.websocket import websocket_endpoint
+from backend.src.api.websocket import match_websocket, websocket_endpoint
 
 
 app = FastAPI(title= "ScoreKeeperApp API")
