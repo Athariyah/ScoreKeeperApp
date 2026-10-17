@@ -10,7 +10,7 @@ def main():
     args = parser.parse_args()
     
     uvicorn.run(
-        "backend.src.api.main:app"
+        "backend.src.api.main:app",
         host = args.host,
         post=args.port,
         reload=False,
