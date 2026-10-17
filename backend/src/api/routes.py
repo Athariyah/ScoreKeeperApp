@@ -27,6 +27,9 @@ class SetScoreRequest(BaseModel):
     status: str
     winner: int | None
     
+class TextRequest(BaseModel):
+    text: str
+    
     
 @router.post("/start")
 async def start_match(request: StartMatchRequest):
@@ -42,7 +45,7 @@ async def start_match(request: StartMatchRequest):
     _current_engine = engine
     
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
 
 @router.get("/state")
@@ -67,7 +70,7 @@ async def add_point(request: AddPointRequest):
     _current_engine.add_point(request.player_index)
 
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
 
 @router.post("/reset")
@@ -79,7 +82,7 @@ async def reset_match():
     _current_engine.reset()
 
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
 
 @router.post("/force-end")
@@ -94,7 +97,7 @@ async def force_end():
     _current_engine.force_end()
 
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
 
 @router.post("/remove-point")
@@ -109,7 +112,7 @@ async def remove_point():
     _current_engine.remove_point()
     
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
 
 @router.post("/set-score")
@@ -121,5 +124,11 @@ async def set_score(request: SetScoreRequest):
     _current_engine.set_score(request.model_dump())
 
     score = _current_engine.get_score()
-    await manager.broadcast(score)
+    await manager.broadcast({"type": "score", "data": score})
     return score
+
+@router.post("/text")
+async def send_text(request: TextRequest):
+    """Отправляет произвольный текст на экран наблюдателя."""
+    await manager.broadcast({"type": "text", "data": request.text})
+    return {"message": "Text broadcasted"}
