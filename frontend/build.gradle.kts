@@ -27,6 +27,7 @@ dependencies {
     implementation(compose.components.resources)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
     implementation(compose.components.resources)
+    implementation(compose.desktop.currentOs)
 
 }
 

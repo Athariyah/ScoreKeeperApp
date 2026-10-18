@@ -23,9 +23,19 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontWeight
+import java.io.File
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
+import org.jetbrains.skia.Image
+import androidx.compose.ui.graphics.toComposeImageBitmap
+
 
 // ============ ЭКРАНЫ ============
 enum class Screen { menu, tennis, valeball }
@@ -67,9 +77,9 @@ fun main() = application {
             ) {
                 Text("✕", fontSize = 20.sp)
             }
-        } // Закрывающая скобка для Box
-    } // Закрывающая скобка для Window
-} // Закрывающая скобка для application
+        }
+    }
+}
 
 // ============ ЭКРАН МЕНЮ ============
 @Composable
@@ -108,27 +118,10 @@ fun МЕНЮ(
     }
 }
 
-// ============ УНИВЕРСАЛЬНЫЙ ИГРОВОЙ ЭКРАН временный для игр ============
-@Composable
-fun GameScreen(title: String, onBack: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF05050A)), // Темный фон
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, color = Color.White, fontSize = 32.sp)
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onBack) {
-                Text("В меню")
-            }
-        }
-    }
-}
+//АНИМАЦИЯ//
 @Composable
 fun AnimatedClickableImage(
-    painter: androidx.compose.ui.graphics.painter.Painter,
+    painter: Painter,
     onClick: () -> Unit
 ) {
     // Источник взаимодействия — отслеживает нажатие
@@ -154,8 +147,58 @@ fun AnimatedClickableImage(
             .scale(scale) // применяем анимацию
             .clickable(
                 interactionSource = interactionSource,
-                indication = null, // убираем тёмную ripple-тень
+                indication = null, // убираем тень
                 onClick = onClick
             )
     )
+}
+
+// ============ УНИВЕРСАЛЬНЫЙ ИГРОВОЙ ЭКРАН ============
+@Composable
+fun GameScreen(title: String, onBack: () -> Unit) {
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF05050A)), // почти чёрный фон
+        contentAlignment = Alignment.Center  // всё содержимое по центру
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, color = Color.White, fontSize = 32.sp) // заголовок экрана
+            Spacer(Modifier.height(16.dp))                     // отступ
+            Button(onClick = onBack) {                         // кнопка «В меню»
+                Text("В меню")
+            }
+        }
+    }
+}
+
+
+// ============ УТИЛИТА ДЛЯ ЗАГРУЗКИ КАРТИНКИ ============
+fun loadImageFromFile(): ImageBitmap? {
+    // Системный диалог выбора файла (AWT). null как родитель — без привязки к окну.
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Выберите логотип", java.awt.FileDialog.LOAD)
+
+    // Фильтр по расширениям: показываем только картинки
+    dialog.setFilenameFilter { _, name ->
+        name.endsWith(".png", ignoreCase = true) ||
+                name.endsWith(".jpg", ignoreCase = true) ||
+                name.endsWith(".jpeg", ignoreCase = true)
+    }
+    dialog.isVisible = true // показать диалог (блокирует до выбора)
+
+    val fileName = dialog.file       // имя файла или null, если отменили
+    val directory = dialog.directory // папка или null
+
+    if (fileName != null && directory != null) {
+        return try {
+            val file = File(directory, fileName)
+            // Байты файла -> Skia Image (декодирование) -> Compose ImageBitmap
+            Image.makeFromEncoded(file.readBytes()).toComposeImageBitmap()
+        } catch (e: Exception) {
+            e.printStackTrace() // ошибка чтения/декодирования — вернуть null
+            null
+        }
+    }
+    return null // пользователь отменил выбор
 }
