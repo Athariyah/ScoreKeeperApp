@@ -70,4 +70,21 @@ class TennisEngine(AbstractMatchEngine):
             "sets_won": list(self.sets_won),
             "server": self.current_server,
             "winner": self.winner,
+            "points_display": self._get_display_points(),
         }
+        
+    def _get_display_points(self) -> list[str]:
+        """Переводит сырые очки в теннисный формат: 0, 15, 30, 40, AD."""
+        labels = ["0", "15", "30", "40"]
+        p1, p2 = self.points[0], self.points[1]
+        
+        if p1 < 3 and p2 < 3:
+            return [labels[p1], labels[p2]]
+        
+        if p1 == p2:
+            return ["40", "40"]
+        
+        if p1 > p2:
+            return ["AD", "40"]
+        else:
+            return ["40", "AD"]

@@ -81,8 +81,8 @@ class VolleyballEngine(AbstractMatchEngine):
         """Возвращает максимальное количество очков для текущей партии."""
         if self.current_set == self.TIEBREAK_SET_NUMBER:
             return self.TIEBREAK_SET_POINTS
-        return self.REGULAR_SET_POINTS
-    
+        return self.REGULAR_SET_POINTS    
+        
     def _is_set_won_by(self, player_index: int) -> bool:
         """Проверяет, выиграл ли указанный игрок текущую партию."""
         opponent = 1 - player_index
