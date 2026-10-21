@@ -26,14 +26,40 @@ class TennisEngine(AbstractMatchEngine):
         self.scoring_history.clear()
 
     def add_point(self, player_index: int) -> None:
-        ...
+        """Прибавляет очко."""
+        self.points[player_index] += 1
+        self.scoring_history.append(player_index)
+        opponent = 1 - player_index
+        if self.points[player_index] >= self.POINTS_TO_WIN_GAME and (self.points[player_index] - self.points[opponent]) >= 2:
+            self.points = [0, 0]
+            self.games[player_index] += 1
+            self.current_server = 1 - player_index
+            if self.games[player_index] >= self.GAMES_TO_WIN_SET and self.games[player_index] - self.games[opponent] >= 2:
+                self.games = [0,0]
+                self.sets_won[player_index] += 1
+                if self.sets_won[player_index] == self.SETS_TO_WIN:
+                    self.status = MatchStatus.FINISHED
+                    self.winner = player_index
 
     def remove_point(self) -> None:
-        ...
+        """Откатывает последнее очко."""
+        if not self.scoring_history:
+            return
+    
+        last_scorer = self.scoring_history.pop()
+        if self.points[last_scorer] > 0:
+            self.points[last_scorer] -= 1
 
     def set_score(self, state: dict[str, Any]) -> None:
-        ...
-
+        """Полная перезапись счёта из окна корректировки."""
+        self.points = list(state["points"])
+        self.games = list(state["games"])
+        self.sets_won = list(state["sets_won"])
+        self.current_server = int(state["server"])
+        self.status = MatchStatus[state["status"]]
+        self.winner = state["winner"]
+        self.scoring_history.clear()
+        
     def get_score(self) -> dict[str, Any]:
         return{
             "sport": self.sport_name,

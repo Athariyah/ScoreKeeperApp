@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Any
 
 from backend.src.core.base.engine import AbstractMatchEngine
 from backend.src.core.factory import create_engine
@@ -18,14 +19,6 @@ class StartMatchRequest(BaseModel):
     
 class AddPointRequest(BaseModel):
     player_index: int
-    
-class SetScoreRequest(BaseModel):
-    sets: list[int]
-    sets_won: list[int]
-    current_set: int
-    server: int
-    status: str
-    winner: int | None
     
 class TextRequest(BaseModel):
     text: str
@@ -116,12 +109,12 @@ async def remove_point():
     return score
 
 @router.post("/set-score")
-async def set_score(request: SetScoreRequest):
+async def set_score(request: dict[str, Any]):
     """Полностью перезаписывает состояние матча."""
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
     
-    _current_engine.set_score(request.model_dump())
+    _current_engine.set_score(request)
 
     score = _current_engine.get_score()
     await manager.broadcast({"type": "score", "data": score})
