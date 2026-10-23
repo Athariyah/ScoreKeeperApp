@@ -28,7 +28,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
     implementation(compose.components.resources)
     implementation(compose.desktop.currentOs)
-
+    implementation("io.ktor:ktor-client-core:2.3.7")
+    implementation("io.ktor:ktor-client-cio:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
 }
 
 // ============ НАСТРОЙКА СБОРКИ ============

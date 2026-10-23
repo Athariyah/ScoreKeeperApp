@@ -32,8 +32,23 @@ import org.jetbrains.skia.Image
 import java.io.File
 import kotlin.system.exitProcess
 
+
+
 // ============ ЭКРАНЫ ============
 enum class Screen { menu, tennis, valeball }
+
+data class MatchState(
+    val team1: String = "КОМАНДА 1",        // имя 1-й команды, показывается в админке и на табло
+    val team2: String = "КОМАНДА 2",        // имя 2-й команды
+    val score1: Int = 0,                    // очки 1-й команды в текущей партии
+    val score2: Int = 0,                    // очки 2-й команды в текущей партии
+    val sets1: Int = 0,                     // выигранные партии 1-й командой
+    val sets2: Int = 0,                     // выигранные партии 2-й командой
+    val currentSet: Int = 1,                // номер текущей партии (1, 2, 3...)
+    val history1: List<Int> = emptyList(),  // стек прошлых score1 для кнопки "Откат"
+    val history2: List<Int> = emptyList(),  // стек прошлых score2 для отката обоих счётов сразу
+    val finished: Boolean = false           // true = матч окончен, кнопки блокируются
+)
 
 // ============ ТОЧКА ВХОДА ============
 fun main() = application {
@@ -43,6 +58,13 @@ fun main() = application {
     // Состояния для окна настройки команд
     var showSetupDialog by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf(Screen.tennis) }
+
+    var gameLogo1 by remember { mutableStateOf<ImageBitmap?>(null) }
+    var gameName1 by remember { mutableStateOf("") }
+    var gameLogo2 by remember { mutableStateOf<ImageBitmap?>(null) }
+    var gameName2 by remember { mutableStateOf("") }
+    var match by remember { mutableStateOf(MatchState()) }    // состояние матча, общее для обоих окон
+    var showAudience by remember { mutableStateOf(false) }    // открыто ли второе окно (табло)
 
     val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
 
@@ -70,29 +92,42 @@ fun main() = application {
                     bexit = { exitProcess(0) }
                 )
 
-                Screen.tennis -> GameScreen(title = "🎾 Теннис", onBack = { currentScreen = Screen.menu })
-                Screen.valeball -> GameScreen(title = "🏐 Волейбол", onBack = { currentScreen = Screen.menu })
-            }
-
-            // Окно настройки команд (появляется поверх всего)
-            if (showSetupDialog) {
-                setteam_window(
-                    exit_setwind = { showSetupDialog = false },
-                    startgame_inready = { logo1, name1, logo2, name2 ->
-                        // Вывод в консоль для проверки
-                        println("Игра началась: $selectedGame")
-                        println("Команда 1: $name1, есть лого: ${logo1 != null}")
-                        println("Команда 2: $name2, есть лого: ${logo2 != null}")
-
-                        // Закрываем окно и запускаем выбранную игру
-                        showSetupDialog = false
-                        currentScreen = selectedGame
-                    }
+                Screen.tennis -> VoleyballScreen(  // экран тениса (админка)
+                    onBack = { currentScreen = Screen.menu },
+                    name1 = gameName1,
+                    name2 = gameName2,
+                    logo1 = gameLogo1,
+                    logo2 = gameLogo2
+                )
+                Screen.valeball -> VoleyballScreen(  // экран волейбола (админка)
+                    onBack = { currentScreen = Screen.menu },
+                    name1 = gameName1,
+                    name2 = gameName2,
+                    logo1 = gameLogo1,
+                    logo2 = gameLogo2
                 )
             }
+
+        }
+
+        if (showSetupDialog) { // Окно настройки команд (появляется поверх всего)
+            setteam_window(
+                exit_setwind = { showSetupDialog = false },
+                startgame_inready = { logo1, name1, logo2, name2 ->
+                    // 👇 ВОТ ЗДЕСЬ Я ВСТАВИЛ СОХРАНЕНИЕ ДАННЫХ
+                    gameLogo1 = logo1
+                    gameName1 = name1
+                    gameLogo2 = logo2
+                    gameName2 = name2
+
+                    showSetupDialog = false
+                    currentScreen = selectedGame
+                }
+            )
         }
     }
 }
+
 
 // ============ ЭКРАН МЕНЮ ============
 @Composable
@@ -260,10 +295,10 @@ fun setteam_window(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "ВВЕДИТЕ НАЗВАНИЕ КОМАНД\nИ ЗАГРУЗИТЕ ИХ ЛОГОТИП.",
-                        color = Color(0xFF2196F3),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "ВВЕДИТЕ ИМЕНА ИГРОКОВ \n И ЗАГРУЗИТЕ ИХ ЛОГО.",
+                        color = Color(32,112,245),
+                        fontSize = 25.sp,
+                        fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
                         lineHeight = 28.sp
                     )
@@ -276,7 +311,7 @@ fun setteam_window(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         TeamColumn(
-                            title = "КОМАНДА 1",
+                            title = "Игрок 1",
                             image = logo1,
                             onImageClick = { logo1 = loadImageFromFile() },
                             name = name1,
@@ -293,7 +328,7 @@ fun setteam_window(
                         )
 
                         TeamColumn(
-                            title = "КОМАНДА 2",
+                            title = "Игрок 2",
                             image = logo2,
                             onImageClick = { logo2 = loadImageFromFile() },
                             name = name2,
@@ -400,4 +435,19 @@ fun TeamColumn(
             )
         }
     }
+}
+
+@Composable
+fun VoleyballScreen(
+    onBack: () -> Unit,
+    name1: String,
+    name2: String,
+    logo1: ImageBitmap?,
+    logo2: ImageBitmap?
+) {
+    // Логика счета
+    var score1 by remember { mutableStateOf(0) }//очки
+    var score2 by remember { mutableStateOf(0) }//очки
+    var sets1 by remember { mutableStateOf(0) }//партия
+    var sets2 by remember { mutableStateOf(0) }//партия
 }
