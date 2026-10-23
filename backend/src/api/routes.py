@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Any
 
 from backend.src.core.base.engine import AbstractMatchEngine
 from backend.src.core.factory import create_engine
+from backend.src.api.websocket import manager
 
 router = APIRouter(prefix="/api/match", tags=["match"])
 
@@ -18,17 +20,12 @@ class StartMatchRequest(BaseModel):
 class AddPointRequest(BaseModel):
     player_index: int
     
-class SetScoreRequest(BaseModel):
-    sets: list[int]
-    sets_won: list[int]
-    current_set: int
-    server: int
-    status: str
-    winner: int | None
+class TextRequest(BaseModel):
+    text: str
     
     
 @router.post("/start")
-def start_match(request: StartMatchRequest):
+async def start_match(request: StartMatchRequest):
     """Начинает новый матч."""
     global _current_engine
     
@@ -39,7 +36,10 @@ def start_match(request: StartMatchRequest):
     
     engine.start_match(request.player1, request.player2, request.server_index)
     _current_engine = engine
-    return _current_engine.get_score()
+    
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
 
 @router.get("/state")
 def get_state():
@@ -49,7 +49,7 @@ def get_state():
     return _current_engine.get_score()
 
 @router.post("/point")
-def add_point(request: AddPointRequest):
+async def add_point(request: AddPointRequest):
     """Добавление очка игроку"""
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
@@ -61,18 +61,25 @@ def add_point(request: AddPointRequest):
         raise HTTPException(status_code=400, detail="player_index must be 0 or 1")
     
     _current_engine.add_point(request.player_index)
-    return _current_engine.get_score()
+
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
 
 @router.post("/reset")
-def reset_match():
+async def reset_match():
     """Сброс состояния матча."""
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
+
     _current_engine.reset()
-    return _current_engine.get_score()
+
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
 
 @router.post("/force-end")
-def force_end():
+async def force_end():
     """Принудительное завершение матча."""    
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
@@ -81,10 +88,13 @@ def force_end():
         raise HTTPException(status_code=409, detail="Match is already finished")
     
     _current_engine.force_end()
-    return _current_engine.get_score()
+
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
 
 @router.post("/remove-point")
-def remove_point():
+async def remove_point():
     """Убирает последнее начисленное очко."""
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
@@ -93,13 +103,25 @@ def remove_point():
         raise HTTPException(status_code=409, detail="Match is already finished")
     
     _current_engine.remove_point()
-    return _current_engine.get_score()
+    
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
 
 @router.post("/set-score")
-def set_score(request: SetScoreRequest):
+async def set_score(request: dict[str, Any]):
     """Полностью перезаписывает состояние матча."""
     if _current_engine is None:
         raise HTTPException(status_code=404, detail="No active match")
     
-    _current_engine.set_score(request.model_dump())
-    return _current_engine.get_score()
+    _current_engine.set_score(request)
+
+    score = _current_engine.get_score()
+    await manager.broadcast({"type": "score", "data": score})
+    return score
+
+@router.post("/text")
+async def send_text(request: TextRequest):
+    """Отправляет произвольный текст на экран наблюдателя."""
+    await manager.broadcast({"type": "text", "data": request.text})
+    return {"message": "Text broadcasted"}
