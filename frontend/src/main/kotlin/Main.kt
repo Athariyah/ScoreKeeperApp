@@ -417,13 +417,12 @@ fun VoleyballScreen(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(60.dp),
-            modifier = Modifier.offset(x = 1400.dp, y = 20.dp)
+            modifier = Modifier.offset(x = 1460.dp, y = 20.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Иконка просто отображается (без кликов)
                 Icon(
                     painter = painterResource("timer.png"),
                     contentDescription = null,
@@ -461,7 +460,8 @@ fun VoleyballScreen(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(width = 490.dp, height = 120.dp)
-                .offset(x = 1320.dp, y = 160.dp))
+                .offset(x = 1320.dp, y = 160.dp)
+        )
 
         MatchCard(
             logo1 = logo1,
@@ -473,10 +473,48 @@ fun VoleyballScreen(
             isFinished = match.status == "FINISHED",
             score1 = match.score1,
             score2 = match.score2,
-            modifier = Modifier.align(Alignment.Center).offset(y = 50.dp)
+            modifier = Modifier.offset(x = 1320.dp, y = 300.dp)
         )
-    }
 
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.offset(x = 1307.dp, y = 575.dp)
+        ) {
+            Image(
+                painter = painterResource("reset.png"),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(width = 224.dp, height = 95.dp)
+                    .clickable {
+                })
+            Image(
+                painter = painterResource("rollback.png"),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(width = 224.dp, height = 95.dp)
+                .clickable {
+            }
+            )
+        }
+        Image(
+            painter = painterResource("adjustment.png"),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(width = 456.dp, height = 95.dp)
+                .offset(x=1307.dp, y=685.dp)
+                .clickable {
+                })
+        Image(
+            painter = painterResource("continuematch.png"),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+
+            modifier = Modifier.size(width = 456.dp, height = 95.dp)
+                .offset(x=1307.dp, y=805.dp)
+                .clickable {
+                })
+    }
 }
 
 //маленькая карточка матча
@@ -488,18 +526,18 @@ fun MatchCard(
     name2: String,
     statusText: String,
     isFinished: Boolean,
-    score1: Int, // 👈 добавили
-    score2: Int, // 👈 добавили
-    modifier: Modifier = Modifier // 👈 добавили для позиционирования
+    score1: Int,
+    score2: Int,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = Color.White,
-        shadowElevation = 8.dp,
-        modifier = modifier.width(350.dp) // 👈 используем переданный modifier
+        shadowElevation = 15.dp,
+        modifier = modifier.width(440.dp) // Ширина карточки
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // --- ИГРОК 1 ---
@@ -507,34 +545,41 @@ fun MatchCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                // Аватарка
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
+                        .size(60.dp) // 👈 Большая аватарка
                         .clip(CircleShape)
-                        .background(if (logo1 != null) Color.Transparent else Color.LightGray)
+                        .background(if (logo1 != null) Color.Transparent else Color(0xFFE0E0E0))
                 ) {
                     if (logo1 != null) {
-                        Image(bitmap = logo1, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        Image(
+                            bitmap = logo1,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.dp)) // Отступ между аватаркой и текстом
 
+                // Имя
                 Text(
                     text = name1,
-                    color = Color(0xFF2979FF),
+                    color = Color(0xFF2979FF), // Твой синий цвет
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
 
-                // 👇 Реальный счет
+                // Очки
                 Box(
                     modifier = Modifier
                         .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Text("$score1", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("$score1", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
@@ -548,19 +593,26 @@ fun MatchCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                // Аватарка
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
+                        .size(60.dp) // 👈 Большая аватарка
                         .clip(CircleShape)
-                        .background(if (logo2 != null) Color.Transparent else Color.LightGray)
+                        .background(if (logo2 != null) Color.Transparent else Color(0xFFE0E0E0))
                 ) {
                     if (logo2 != null) {
-                        Image(bitmap = logo2, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        Image(
+                            bitmap = logo2,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(16.dp))
 
+                // Имя
                 Text(
                     text = name2,
                     color = Color(0xFF2979FF),
@@ -569,17 +621,17 @@ fun MatchCard(
                     modifier = Modifier.weight(1f)
                 )
 
-                // 👇 Реальный счет
+                // Очки
                 Box(
                     modifier = Modifier
                         .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Text("$score2", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("$score2", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // --- СТАТУС ---
             Box(
@@ -593,22 +645,23 @@ fun MatchCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (isFinished) Color.Red else Color.Green)
+                            .background(if (isFinished) Color.Red else Color(0xFF4CAF50))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = statusText,
-                        color = if (isFinished) Color.Red else Color.Green,
+                        color = if (isFinished) Color.Red else Color(0xFF4CAF50),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 16.sp
                     )
                 }
             }
         }
     }
 }
+
 // ============ ЭКРАН ТАБЛО (ВТОРОЕ ОКНО) ============
 @Composable
 fun AudienceScreen(match: MatchState) {
