@@ -28,34 +28,35 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
+import com.example.ApiClient
 import org.jetbrains.skia.Image
 import java.io.File
 import kotlin.system.exitProcess
 
-
+fun formatTime(totalSeconds: Int): String {
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%02d:%02d".format(minutes, seconds)
+}
 
 // ============ ЭКРАНЫ ============
 enum class Screen { menu, tennis, valeball }
 
 data class MatchState(
-    val team1: String = "КОМАНДА 1",        // имя 1-й команды, показывается в админке и на табло
-    val team2: String = "КОМАНДА 2",        // имя 2-й команды
-    val score1: Int = 0,                    // очки 1-й команды в текущей партии
-    val score2: Int = 0,                    // очки 2-й команды в текущей партии
-    val sets1: Int = 0,                     // выигранные партии 1-й командой
-    val sets2: Int = 0,                     // выигранные партии 2-й командой
-    val currentSet: Int = 1,                // номер текущей партии (1, 2, 3...)
-    val history1: List<Int> = emptyList(),  // стек прошлых score1 для кнопки "Откат"
-    val history2: List<Int> = emptyList(),  // стек прошлых score2 для отката обоих счётов сразу
-    val finished: Boolean = false           // true = матч окончен, кнопки блокируются
+    val team1: String = "КОМАНДА 1",
+    val team2: String = "КОМАНДА 2",
+    val score1: Int = 0,
+    val score2: Int = 0,
+    val sets1: Int = 0,
+    val sets2: Int = 0,
+    val currentSet: Int = 1,
+    val finished: Boolean = false,
+    val status: String = "IN_PROGRESS"
 )
 
 // ============ ТОЧКА ВХОДА ============
 fun main() = application {
-    // Текущий экран
     var currentScreen by remember { mutableStateOf(Screen.menu) }
-
-    // Состояния для окна настройки команд
     var showSetupDialog by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf(Screen.tennis) }
 
@@ -63,21 +64,20 @@ fun main() = application {
     var gameName1 by remember { mutableStateOf("") }
     var gameLogo2 by remember { mutableStateOf<ImageBitmap?>(null) }
     var gameName2 by remember { mutableStateOf("") }
-    var match by remember { mutableStateOf(MatchState()) }    // состояние матча, общее для обоих окон
-    var showAudience by remember { mutableStateOf(false) }    // открыто ли второе окно (табло)
+
+    // ГЛОБАЛЬНОЕ СОСТОЯНИЕ МАТЧА (управляется Python-бэкендом)
+    var match by remember { mutableStateOf(MatchState()) }
+    var showAudience by remember { mutableStateOf(false) }
 
     val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
 
+    // ============ ГЛАВНОЕ ОКНО (АДМИНКА) ============
     Window(
         onCloseRequest = ::exitApplication,
-        title = "ScoreKeeper",
-        state = windowState,
-        undecorated = true,
+        title = "ScoreKeeper - Админка",
+        state = windowState
     ) {
-        // Главный контейнер
         Box(modifier = Modifier.fillMaxSize()) {
-
-            // Переключение экранов
             when (currentScreen) {
                 Screen.menu -> МЕНЮ(
                     btenis = {
@@ -88,57 +88,54 @@ fun main() = application {
                         selectedGame = Screen.valeball
                         showSetupDialog = true
                     },
-                    bsetting = { /* Здесь будет логика общих настроек */ },
+                    bsetting = { },
                     bexit = { exitProcess(0) }
                 )
 
-                Screen.tennis -> VoleyballScreen(  // экран тениса (админка)
+                Screen.tennis, Screen.valeball -> VoleyballScreen( // Используем один экран для обоих
                     onBack = { currentScreen = Screen.menu },
                     name1 = gameName1,
                     name2 = gameName2,
                     logo1 = gameLogo1,
-                    logo2 = gameLogo2
-                )
-                Screen.valeball -> VoleyballScreen(  // экран волейбола (админка)
-                    onBack = { currentScreen = Screen.menu },
-                    name1 = gameName1,
-                    name2 = gameName2,
-                    logo1 = gameLogo1,
-                    logo2 = gameLogo2
+                    logo2 = gameLogo2,
+                    match = match,
+                    onMatchUpdate = { match = it },
+                    onToggleAudience = { showAudience = !showAudience }
                 )
             }
-
         }
 
-        if (showSetupDialog) { // Окно настройки команд (появляется поверх всего)
+        if (showSetupDialog) {
             setteam_window(
                 exit_setwind = { showSetupDialog = false },
                 startgame_inready = { logo1, name1, logo2, name2 ->
-                    // 👇 ВОТ ЗДЕСЬ Я ВСТАВИЛ СОХРАНЕНИЕ ДАННЫХ
                     gameLogo1 = logo1
                     gameName1 = name1
                     gameLogo2 = logo2
                     gameName2 = name2
-
                     showSetupDialog = false
                     currentScreen = selectedGame
                 }
             )
         }
     }
-}
 
+    // ============ ВТОРОЕ ОКНО (ТАБЛО ДЛЯ ЗРИТЕЛЕЙ) ============
+    if (showAudience) {
+        Window(
+            onCloseRequest = { showAudience = false },
+            title = "ScoreKeeper - Табло",
+            state = rememberWindowState(placement = WindowPlacement.Fullscreen)
+        ) {
+            AudienceScreen(match = match)
+        }
+    }
+}
 
 // ============ ЭКРАН МЕНЮ ============
 @Composable
-fun МЕНЮ(
-    btenis: () -> Unit,
-    bvoleiball: () -> Unit,
-    bsetting: () -> Unit,
-    bexit: () -> Unit
-) {
+fun МЕНЮ(btenis: () -> Unit, bvoleiball: () -> Unit, bsetting: () -> Unit, bexit: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // Фон
         Image(
             painter = painterResource("background.png"),
             contentDescription = null,
@@ -146,48 +143,33 @@ fun МЕНЮ(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Кнопки-картинки (Волейбол и Теннис)
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 200.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 200.dp),
             horizontalArrangement = Arrangement.spacedBy(150.dp)
         ) {
-            AnimatedClickableImage(
-                painter = painterResource("valeiball.png"),
-                onClick = bvoleiball
-            )
-            AnimatedClickableImage(
-                painter = painterResource("tennis.png"),
-                onClick = btenis
-            )
+            AnimatedClickableImage(painter = painterResource("valeiball.png"), onClick = bvoleiball)
+            AnimatedClickableImage(painter = painterResource("tennis.png"), onClick = btenis)
         }
 
         Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
+            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Image(
                 painter = painterResource("seting.png"),
                 contentDescription = "Настройки",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { bsetting() }
+                modifier = Modifier.size(40.dp).clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { bsetting() }
             )
             Image(
                 painter = painterResource("exit.png"),
                 contentDescription = "Закрыть",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { bexit() }
+                modifier = Modifier.size(40.dp).clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { bexit() }
             )
         }
     }
@@ -195,10 +177,7 @@ fun МЕНЮ(
 
 // ============ АНИМАЦИЯ КНОПОК ============
 @Composable
-fun AnimatedClickableImage(
-    painter: Painter,
-    onClick: () -> Unit
-) {
+fun AnimatedClickableImage(painter: Painter, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
@@ -215,8 +194,7 @@ fun AnimatedClickableImage(
         painter = painter,
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .size(width = 370.dp, height = 140.dp)
+        modifier = Modifier.size(width = 370.dp, height = 140.dp)
             .scale(scale)
             .clickable(
                 interactionSource = interactionSource,
@@ -224,25 +202,6 @@ fun AnimatedClickableImage(
                 onClick = onClick
             )
     )
-}
-
-// ============ УНИВЕРСАЛЬНЫЙ ИГРОВОЙ ЭКРАН ============
-@Composable
-fun GameScreen(title: String, onBack: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF05050A)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, color = Color.White, fontSize = 32.sp)
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onBack) {
-                Text("В меню")
-            }
-        }
-    }
 }
 
 // ============ УТИЛИТА ДЛЯ ЗАГРУЗКИ КАРТИНКИ ============
@@ -285,18 +244,13 @@ fun setteam_window(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = Color.White,
-            modifier = Modifier
-                .width(500.dp)
-                .height(500.dp)
+            modifier = Modifier.width(500.dp).height(500.dp)
         ) {
             Box(modifier = Modifier.padding(all = 24.dp)) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "ВВЕДИТЕ ИМЕНА ИГРОКОВ \n И ЗАГРУЗИТЕ ИХ ЛОГО.",
-                        color = Color(32,112,245),
+                        color = Color(32, 112, 245),
                         fontSize = 25.sp,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
@@ -305,7 +259,6 @@ fun setteam_window(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Две колонки команд + разделитель
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -318,12 +271,8 @@ fun setteam_window(
                             onNameChange = { name1 = it }
                         )
 
-                        // Вертикальная линия-разделитель
                         Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(280.dp)
-                                .background(Color(0xFFE0E0E0))
+                            modifier = Modifier.width(1.dp).height(280.dp).background(Color(0xFFE0E0E0))
                                 .align(Alignment.CenterVertically)
                         )
 
@@ -342,20 +291,15 @@ fun setteam_window(
                         onClick = { startgame_inready(logo1, name1, logo2, name2) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF81C784)),
                         shape = RoundedCornerShape(50),
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(50.dp)
+                        modifier = Modifier.width(200.dp).height(50.dp)
                     ) {
                         Text("ГОТОВО", fontSize = 20.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                // Кнопка «Назад» (стрелочка)
                 IconButton(
                     onClick = exit_setwind,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 16.dp, y = (-16).dp)
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 16.dp, y = (-16).dp)
                 ) {
                     Text("←", fontSize = 32.sp, color = Color(0xFF1976D2))
                 }
@@ -373,24 +317,16 @@ fun TeamColumn(
     name: String,
     onNameChange: (String) -> Unit
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(180.dp)
-    ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(180.dp)) {
         Text(title, color = Color(0xFF1976D2), fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Круглая кнопка-аватар
         Box(
-            modifier = Modifier
-                .size(140.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFE0E0E0))
+            modifier = Modifier.size(140.dp).clip(CircleShape).background(Color(0xFFE0E0E0))
                 .clickable { onImageClick() },
             contentAlignment = Alignment.Center
         ) {
             if (image != null) {
-                // Если логотип выбран — рисуем его
                 Image(
                     bitmap = image,
                     contentDescription = "Logo",
@@ -398,11 +334,9 @@ fun TeamColumn(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // 👇 А ВОТ ЗДЕСЬ ТЕПЕРЬ ТВОЯ КАРТИНКА
                 Image(
-                    painter = painterResource("vsavphoto.png"), // Имя твоего файла
+                    painter = painterResource("vsavphoto.png"),
                     contentDescription = "Добавить фото",
-                    // Вписываем картинку так, чтобы она заполнила кружок
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -410,12 +344,8 @@ fun TeamColumn(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Поле ввода имени команды
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp) // Задай нужную высоту
-                .background(Color(0xFF455A64), RoundedCornerShape(12.dp)),
+            modifier = Modifier.fillMaxWidth().height(40.dp).background(Color(0xFF455A64), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             BasicTextField(
@@ -437,17 +367,257 @@ fun TeamColumn(
     }
 }
 
+// ============ ЭКРАН АДМИНКИ ИГРЫ (управляется Python) ============
 @Composable
 fun VoleyballScreen(
     onBack: () -> Unit,
     name1: String,
     name2: String,
     logo1: ImageBitmap?,
-    logo2: ImageBitmap?
+    logo2: ImageBitmap?,
+    match: MatchState,
+    onMatchUpdate: (MatchState) -> Unit,
+    onToggleAudience: () -> Unit
 ) {
-    // Логика счета
-    var score1 by remember { mutableStateOf(0) }//очки
-    var score2 by remember { mutableStateOf(0) }//очки
-    var sets1 by remember { mutableStateOf(0) }//партия
-    var sets2 by remember { mutableStateOf(0) }//партия
+    LaunchedEffect(Unit) {
+        ApiClient.startMatch("volleyball", name1, name2, 0) { response ->
+            if (response != null) {
+                onMatchUpdate(
+                    match.copy(
+                        team1 = response.player1, team2 = response.player2,
+                        score1 = response.score[0], score2 = response.score[1],
+                        sets1 = response.sets[0], sets2 = response.sets[1],
+                        currentSet = response.current_set,
+                        status = response.status
+                    )
+                )
+            }
+        }
+    }
+
+    var secondsElapsed by remember { mutableStateOf(0) }
+    var isTimerRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(isTimerRunning) {
+        if (isTimerRunning) {
+            while (true) {
+                kotlinx.coroutines.delay(1000L)
+                secondsElapsed++
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        2
+        Image(
+            painter = painterResource("ВОЛЕЙБОЛЗАДНИЙФОН.png"),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(60.dp),
+            modifier = Modifier.offset(x = 1400.dp, y = 20.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Иконка просто отображается (без кликов)
+                Icon(
+                    painter = painterResource("timer.png"),
+                    contentDescription = null,
+                    modifier = Modifier.size(width = 30.dp, height = 35.dp)
+                )
+
+                // Цифры таймера
+                Text(
+                    text = formatTime(secondsElapsed),
+                    color = Color.Gray,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Image(
+                painter = painterResource("setingingame.png"),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(width = 35.dp, height = 35.dp)
+                    .clickable {
+                        // Сюда потом добавишь логику открытия окна настроек
+                        println("Нажата шестеренка настроек")
+                    }
+            )
+            Box(modifier = Modifier.size(width = 185.dp, height = 55.dp)) {
+                AnimatedClickableImage(
+                    painter = painterResource("back.png"),
+                    onClick = { onBack() }
+                )
+            }
+
+        }
+        Image(
+            painter = painterResource("Group.png"),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(width = 490.dp, height = 120.dp)
+                .offset(x = 1320.dp, y = 160.dp))
+
+        MatchCard(
+            logo1 = logo1,
+            name1 = name1,
+            logo2 = logo2,
+            name2 = name2,
+            // Проверяем статус, который прислал Python
+            statusText = if (match.status == "FINISHED") "Завершено" else "В игре",
+            isFinished = match.status == "FINISHED",
+            score1 = match.score1,
+            score2 = match.score2,
+            modifier = Modifier.align(Alignment.Center).offset(y = 50.dp)
+        )
+    }
+
+}
+
+//маленькая карточка матча
+@Composable
+fun MatchCard(
+    logo1: ImageBitmap?,
+    name1: String,
+    logo2: ImageBitmap?,
+    name2: String,
+    statusText: String,
+    isFinished: Boolean,
+    score1: Int, // 👈 добавили
+    score2: Int, // 👈 добавили
+    modifier: Modifier = Modifier // 👈 добавили для позиционирования
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        shadowElevation = 8.dp,
+        modifier = modifier.width(350.dp) // 👈 используем переданный modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // --- ИГРОК 1 ---
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(if (logo1 != null) Color.Transparent else Color.LightGray)
+                ) {
+                    if (logo1 != null) {
+                        Image(bitmap = logo1, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Text(
+                    text = name1,
+                    color = Color(0xFF2979FF),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // 👇 Реальный счет
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("$score1", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            }
+
+            // Разделитель
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFEEEEEE)))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- ИГРОК 2 ---
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(if (logo2 != null) Color.Transparent else Color.LightGray)
+                ) {
+                    if (logo2 != null) {
+                        Image(bitmap = logo2, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Text(
+                    text = name2,
+                    color = Color(0xFF2979FF),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // 👇 Реальный счет
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("$score2", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- СТАТУС ---
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = if (isFinished) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
+                        shape = RoundedCornerShape(50)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isFinished) Color.Red else Color.Green)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = statusText,
+                        color = if (isFinished) Color.Red else Color.Green,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+// ============ ЭКРАН ТАБЛО (ВТОРОЕ ОКНО) ============
+@Composable
+fun AudienceScreen(match: MatchState) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource("backgroundaudencscreen.png"),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }

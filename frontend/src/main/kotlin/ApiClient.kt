@@ -1,3 +1,5 @@
+package com.example
+
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -9,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
 
 @Serializable
 data class ScoreResponse(
@@ -23,7 +26,8 @@ data class ScoreResponse(
 )
 
 object ApiClient {
-    private val client = HttpClient(CIO) {
+    // В Ktor 3.0 HttpClient(CIO) по-прежнему работает
+    private val client = HttpClient(io.ktor.client.engine.cio.CIO) {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
@@ -39,7 +43,22 @@ object ApiClient {
                     setBody(mapOf("sport" to sport, "player1" to p1, "player2" to p2, "server_index" to server))
                 }.body()
                 onResult(response)
-            } catch (e: Exception) { e.printStackTrace(); onResult(null) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(null)
+            }
+        }
+    }
+
+    fun forceEndMatch(onResult: (ScoreResponse?) -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val response: ScoreResponse = client.post("$BASE_URL/force-end").body()
+                onResult(response)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(null)
+            }
         }
     }
 
@@ -51,7 +70,10 @@ object ApiClient {
                     setBody(mapOf("player_index" to playerIndex))
                 }.body()
                 onResult(response)
-            } catch (e: Exception) { e.printStackTrace(); onResult(null) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(null)
+            }
         }
     }
 }
