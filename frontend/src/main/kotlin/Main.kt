@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
 import com.example.ApiClient
+import com.example.ScoreResponse
 import org.jetbrains.skia.Image
 import java.io.File
 import kotlin.system.exitProcess
@@ -51,8 +52,35 @@ data class MatchState(
     val sets2: Int = 0,
     val currentSet: Int = 1,
     val finished: Boolean = false,
-    val status: String = "IN_PROGRESS"
-)
+    val status: String = "NOT_STARTED",
+    val sport: String = "volleyball",
+    val tennisPointsDisplay: List<String>? = null,
+    val tennisGames: List<Int>? = null,
+    val server: Int = 0
+) {
+    companion object {
+        fun fromResponse(r: ScoreResponse): MatchState {
+            val isTennis = r.sport == "tennis"
+            return MatchState(
+                team1 = r.player1,
+                team2 = r.player2,
+                score1 = if (isTennis) r.games?.getOrNull(0) ?: 0
+                else r.sets?.getOrNull(0) ?: 0,
+                score2 = if (isTennis) r.games?.getOrNull(1) ?: 0
+                else r.sets?.getOrNull(1) ?: 0,
+                sets1 = r.setsWon?.getOrNull(0) ?: 0,
+                sets2 = r.setsWon?.getOrNull(1) ?: 0,
+                currentSet = r.currentSet ?: (r.setsWon?.sum()?.plus(1) ?: 1),
+                finished = r.isFinished,
+                status = r.status,
+                sport = r.sport,
+                tennisPointsDisplay = r.pointsDisplay,
+                tennisGames = r.games,
+                server = r.server
+            )
+        }
+    }
+}
 
 // ============ ТОЧКА ВХОДА ============
 fun main() = application {
@@ -65,34 +93,26 @@ fun main() = application {
     var gameLogo2 by remember { mutableStateOf<ImageBitmap?>(null) }
     var gameName2 by remember { mutableStateOf("") }
 
-    // ГЛОБАЛЬНОЕ СОСТОЯНИЕ МАТЧА (управляется Python-бэкендом)
     var match by remember { mutableStateOf(MatchState()) }
     var showAudience by remember { mutableStateOf(false) }
 
     val windowState = rememberWindowState(placement = WindowPlacement.Fullscreen)
 
-    // ============ ГЛАВНОЕ ОКНО (АДМИНКА) ============
     Window(
-        onCloseRequest = ::exitApplication,
-        title = "ScoreKeeper - Админка",
-        state = windowState
+        onCloseRequest = ::exitApplication, title = "ScoreKeeper - Админка", state = windowState
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             when (currentScreen) {
-                Screen.menu -> МЕНЮ(
-                    btenis = {
-                        selectedGame = Screen.tennis
-                        showSetupDialog = true
-                    },
-                    bvoleiball = {
-                        selectedGame = Screen.valeball
-                        showSetupDialog = true
-                    },
-                    bsetting = { },
-                    bexit = { exitProcess(0) }
-                )
+                Screen.menu -> МЕНЮ(btenis = {
+                    selectedGame = Screen.tennis
+                    showSetupDialog = true
+                }, bvoleiball = {
+                    selectedGame = Screen.valeball
+                    showSetupDialog = true
+                }, bsetting = { }, bexit = { exitProcess(0) })
 
-                Screen.tennis, Screen.valeball -> VoleyballScreen( // Используем один экран для обоих
+                Screen.tennis, Screen.valeball -> VoleyballScreen(
+                    sport = if (currentScreen == Screen.tennis) "tennis" else "volleyball",
                     onBack = { currentScreen = Screen.menu },
                     name1 = gameName1,
                     name2 = gameName2,
@@ -100,8 +120,7 @@ fun main() = application {
                     logo2 = gameLogo2,
                     match = match,
                     onMatchUpdate = { match = it },
-                    onToggleAudience = { showAudience = !showAudience }
-                )
+                    onToggleAudience = { showAudience = !showAudience })
             }
         }
 
@@ -115,12 +134,10 @@ fun main() = application {
                     gameName2 = name2
                     showSetupDialog = false
                     currentScreen = selectedGame
-                }
-            )
+                })
         }
     }
 
-    // ============ ВТОРОЕ ОКНО (ТАБЛО ДЛЯ ЗРИТЕЛЕЙ) ============
     if (showAudience) {
         Window(
             onCloseRequest = { showAudience = false },
@@ -155,25 +172,16 @@ fun МЕНЮ(btenis: () -> Unit, bvoleiball: () -> Unit, bsetting: () -> Unit, b
             modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Image(
-                painter = painterResource("seting.png"),
-                contentDescription = "Настройки",
-                modifier = Modifier.size(40.dp).clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { bsetting() }
+            AnimatedIconButton(
+                painter = painterResource("seting.png"), onClick = { bsetting() }, modifier = Modifier.size(40.dp)
             )
-            Image(
-                painter = painterResource("exit.png"),
-                contentDescription = "Закрыть",
-                modifier = Modifier.size(40.dp).clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { bexit() }
+            AnimatedIconButton(
+                painter = painterResource("exit.png"), onClick = { bexit() }, modifier = Modifier.size(40.dp)
             )
         }
     }
 }
+
 
 // ============ АНИМАЦИЯ КНОПОК ============
 @Composable
@@ -182,24 +190,17 @@ fun AnimatedClickableImage(painter: Painter, onClick: () -> Unit) {
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "scale"
+        targetValue = if (isPressed) 0.92f else 1f, animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow
+        ), label = "scale"
     )
 
     Image(
         painter = painter,
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        modifier = Modifier.size(width = 370.dp, height = 140.dp)
-            .scale(scale)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
+        modifier = Modifier.size(width = 370.dp, height = 140.dp).scale(scale).clickable(
+                interactionSource = interactionSource, indication = null, onClick = onClick
             )
     )
 }
@@ -208,9 +209,10 @@ fun AnimatedClickableImage(painter: Painter, onClick: () -> Unit) {
 fun loadImageFromFile(): ImageBitmap? {
     val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Выберите логотип", java.awt.FileDialog.LOAD)
     dialog.setFilenameFilter { _, name ->
-        name.endsWith(".png", ignoreCase = true) ||
-                name.endsWith(".jpg", ignoreCase = true) ||
-                name.endsWith(".jpeg", ignoreCase = true)
+        name.endsWith(".png", ignoreCase = true) || name.endsWith(".jpg", ignoreCase = true) || name.endsWith(
+            ".jpeg",
+            ignoreCase = true
+        )
     }
     dialog.isVisible = true
 
@@ -232,8 +234,7 @@ fun loadImageFromFile(): ImageBitmap? {
 // ============ ОКНО НАСТРОЙКИ КОМАНД ============
 @Composable
 fun setteam_window(
-    exit_setwind: () -> Unit,
-    startgame_inready: (ImageBitmap?, String, ImageBitmap?, String) -> Unit
+    exit_setwind: () -> Unit, startgame_inready: (ImageBitmap?, String, ImageBitmap?, String) -> Unit
 ) {
     var logo1 by remember { mutableStateOf<ImageBitmap?>(null) }
     var logo2 by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -242,9 +243,7 @@ fun setteam_window(
 
     Dialog(onDismissRequest = exit_setwind) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
-            modifier = Modifier.width(500.dp).height(500.dp)
+            shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.width(500.dp).height(500.dp)
         ) {
             Box(modifier = Modifier.padding(all = 24.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -268,8 +267,7 @@ fun setteam_window(
                             image = logo1,
                             onImageClick = { logo1 = loadImageFromFile() },
                             name = name1,
-                            onNameChange = { name1 = it }
-                        )
+                            onNameChange = { name1 = it })
 
                         Box(
                             modifier = Modifier.width(1.dp).height(280.dp).background(Color(0xFFE0E0E0))
@@ -281,8 +279,7 @@ fun setteam_window(
                             image = logo2,
                             onImageClick = { logo2 = loadImageFromFile() },
                             name = name2,
-                            onNameChange = { name2 = it }
-                        )
+                            onNameChange = { name2 = it })
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -298,8 +295,7 @@ fun setteam_window(
                 }
 
                 IconButton(
-                    onClick = exit_setwind,
-                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 16.dp, y = (-16).dp)
+                    onClick = exit_setwind, modifier = Modifier.align(Alignment.TopEnd).offset(x = 16.dp, y = (-16).dp)
                 ) {
                     Text("←", fontSize = 32.sp, color = Color(0xFF1976D2))
                 }
@@ -311,11 +307,7 @@ fun setteam_window(
 // ============ КОЛОНКА КОМАНДЫ ============
 @Composable
 fun TeamColumn(
-    title: String,
-    image: ImageBitmap?,
-    onImageClick: () -> Unit,
-    name: String,
-    onNameChange: (String) -> Unit
+    title: String, image: ImageBitmap?, onImageClick: () -> Unit, name: String, onNameChange: (String) -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(180.dp)) {
         Text(title, color = Color(0xFF1976D2), fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -323,8 +315,7 @@ fun TeamColumn(
 
         Box(
             modifier = Modifier.size(140.dp).clip(CircleShape).background(Color(0xFFE0E0E0))
-                .clickable { onImageClick() },
-            contentAlignment = Alignment.Center
+                .clickable { onImageClick() }, contentAlignment = Alignment.Center
         ) {
             if (image != null) {
                 Image(
@@ -367,9 +358,34 @@ fun TeamColumn(
     }
 }
 
-// ============ ЭКРАН АДМИНКИ ИГРЫ (управляется Python) ============
+@Composable
+fun AnimatedIconButton(
+    painter: Painter, onClick: () -> Unit, modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Чуть более быстрая и четкая анимация для маленьких иконок
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.85f else 1f, animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium
+        ), label = "icon_scale"
+    )
+
+    Image(
+        painter = painter,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier.scale(scale).clickable(
+                interactionSource = interactionSource, indication = null, onClick = onClick
+            )
+    )
+}
+
+// ============ ЭКРАН АДМИНКИ ИГРЫ ============
 @Composable
 fun VoleyballScreen(
+    sport: String,
     onBack: () -> Unit,
     name1: String,
     name2: String,
@@ -379,24 +395,21 @@ fun VoleyballScreen(
     onMatchUpdate: (MatchState) -> Unit,
     onToggleAudience: () -> Unit
 ) {
-    LaunchedEffect(Unit) {
-        ApiClient.startMatch("volleyball", name1, name2, 0) { response ->
-            if (response != null) {
-                onMatchUpdate(
-                    match.copy(
-                        team1 = response.player1, team2 = response.player2,
-                        score1 = response.score[0], score2 = response.score[1],
-                        sets1 = response.sets[0], sets2 = response.sets[1],
-                        currentSet = response.current_set,
-                        status = response.status
-                    )
-                )
-            }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    // Автоскрытие ошибки через 3 секунды
+    LaunchedEffect(errorMsg) {
+        if (errorMsg != null) {
+            kotlinx.coroutines.delay(3000L)
+            errorMsg = null
         }
     }
 
+    // Состояние таймера
     var secondsElapsed by remember { mutableStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
+
+    // Логика таймера
     LaunchedEffect(isTimerRunning) {
         if (isTimerRunning) {
             while (true) {
@@ -406,118 +419,361 @@ fun VoleyballScreen(
         }
     }
 
+    val apply: (ScoreResponse?) -> Unit = { r ->
+        if (r != null) onMatchUpdate(MatchState.fromResponse(r))
+    }
+
+    // ==========================================
+    // ЛОГИКА ДЛЯ ГЛАВНОЙ КНОПКИ (Старт/Стоп)
+    // ==========================================
+    val startMatchAction = {
+        ApiClient.startMatch(sport, name1.ifBlank { "Игрок 1" }, name2.ifBlank { "Игрок 2" }, 0, onResult = { r ->
+            if (r != null) {
+                onMatchUpdate(MatchState.fromResponse(r))
+                isTimerRunning = true // Запускаем таймер
+                secondsElapsed = 0    // Сбрасываем время
+            }
+        }, onError = { msg -> errorMsg = msg })
+    }
+
+    val endMatchAction = {
+        ApiClient.forceEnd(onResult = { r ->
+            if (r != null) {
+                onMatchUpdate(MatchState.fromResponse(r))
+                isTimerRunning = false // Останавливаем таймер
+            }
+        }, onError = { msg -> errorMsg = msg })
+    }
+
+    // Выбираем картинку и действие в зависимости от статуса матча
+    val (currentBtnImage, currentBtnAction) = when (match.status) {
+        "NOT_STARTED" -> painterResource("startmatch.png") to startMatchAction
+        "IN_PROGRESS" -> painterResource("ENDMATCH.png") to endMatchAction
+        else -> painterResource("continuematch.png") to startMatchAction // Если FINISHED, начинаем заново
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        2
         Image(
             painter = painterResource("ВОЛЕЙБОЛЗАДНИЙФОН.png"),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+        // ПУЛЬТ УПРАВЛЕНИЯ (Добавляет очки)
+        ScorePad(
+            logo1 = logo1, // Первая картинка
+            logo2 = logo2, // 👈 ДОБАВЬТЕ ЭТУ СТРОКУ
+            name1 = name1.ifBlank { "КОМАНДА 1" },
+            name2 = name2.ifBlank { "КОМАНДА 2" },
+            score1 = match.score1,
+            score2 = match.score2,
+            currentSet = match.currentSet,
+            onAddPoint1 = { ApiClient.addPoint(0, apply) { errorMsg = it } },
+            onAddPoint2 = { ApiClient.addPoint(1, apply) { errorMsg = it } },
+            modifier = Modifier.offset(x = 200.dp, y = 800.dp)
+        )
+        // ВЕРХНЯЯ ПАНЕЛЬ (Таймер, настройки, назад)
+        // ВЕРХНЯЯ ПАНЕЛЬ (Таймер, настройки, назад)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(60.dp),
             modifier = Modifier.offset(x = 1460.dp, y = 20.dp)
         ) {
+            // Блок таймера
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.clickable { isTimerRunning = !isTimerRunning } // Пауза/пуск по клику на таймер
             ) {
-                Icon(
+                Image(
                     painter = painterResource("timer.png"),
                     contentDescription = null,
                     modifier = Modifier.size(width = 30.dp, height = 35.dp)
                 )
-
-                // Цифры таймера
                 Text(
-                    text = formatTime(secondsElapsed),
-                    color = Color.Gray,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Image(
-                painter = painterResource("setingingame.png"),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(width = 35.dp, height = 35.dp)
-                    .clickable {
-                        // Сюда потом добавишь логику открытия окна настроек
-                        println("Нажата шестеренка настроек")
-                    }
-            )
-            Box(modifier = Modifier.size(width = 185.dp, height = 55.dp)) {
-                AnimatedClickableImage(
-                    painter = painterResource("back.png"),
-                    onClick = { onBack() }
+                    formatTime(secondsElapsed), color = Color.Gray, fontSize = 24.sp, fontWeight = FontWeight.Bold
                 )
             }
 
+            // Анимированная шестеренка
+            AnimatedIconButton(
+                painter = painterResource("setingingame.png"),
+                onClick = { isTimerRunning = !isTimerRunning },
+                modifier = Modifier.size(width = 35.dp, height = 35.dp)
+            )
+
+            // Кнопка Назад (уже анимирована через AnimatedClickableImage)
+            Box(modifier = Modifier.size(width = 185.dp, height = 55.dp)) {
+                AnimatedClickableImage(painterResource("back.png")) { onBack() }
+            }
         }
+
         Image(
             painter = painterResource("Group.png"),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(width = 490.dp, height = 120.dp)
-                .offset(x = 1320.dp, y = 160.dp)
+            modifier = Modifier.size(width = 490.dp, height = 120.dp).offset(x = 1320.dp, y = 160.dp)
         )
 
+
+        // КАРТОЧКА МАТЧА
         MatchCard(
-            logo1 = logo1,
-            name1 = name1,
-            logo2 = logo2,
-            name2 = name2,
-            // Проверяем статус, который прислал Python
-            statusText = if (match.status == "FINISHED") "Завершено" else "В игре",
-            isFinished = match.status == "FINISHED",
+            logo1,
+            name1.ifBlank { "Игрок 1" },
+            logo2,
+            name2.ifBlank { "Игрок 2" },
+            statusText = when (match.status) {
+                "FINISHED" -> "Завершено"; "NOT_STARTED" -> "Не начат"; else -> "В игре"
+            },
+            isFinished = match.finished,
             score1 = match.score1,
             score2 = match.score2,
+            tennisPoints = match.tennisPointsDisplay,
+            onAddPoint1 = { ApiClient.addPoint(0, apply) { errorMsg = it } },
+            onAddPoint2 = { ApiClient.addPoint(1, apply) { errorMsg = it } },
             modifier = Modifier.offset(x = 1320.dp, y = 300.dp)
         )
 
+        // ==========================================
+        // АНИМИРОВАННЫЕ КНОПКИ УПРАВЛЕНИЯ
+        // ==========================================
+
+        // КНОПКИ СБРОС / ОТКАТ
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            modifier = Modifier.offset(x = 1307.dp, y = 575.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.offset(x = 1307.dp, y = 575.dp).width(456.dp)
         ) {
-            Image(
-                painter = painterResource("reset.png"),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(width = 224.dp, height = 95.dp)
-                    .clickable {
-                })
-            Image(
-                painter = painterResource("rollback.png"),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(width = 224.dp, height = 95.dp)
-                .clickable {
+            Box(modifier = Modifier.weight(1f)) {
+                AnimatedGameButton(
+                    painter = painterResource("reset.png"), onClick = {
+                        isTimerRunning = false
+                        secondsElapsed = 0
+                        ApiClient.reset(apply) { errorMsg = it }
+                    }, modifier = Modifier.fillMaxWidth().height(95.dp), contentScale = ContentScale.Fit
+                )
             }
+            Box(modifier = Modifier.weight(1f)) {
+                AnimatedGameButton(
+                    painter = painterResource("rollback.png"),
+                    onClick = { ApiClient.removePoint(apply) { errorMsg = it } },
+                    modifier = Modifier.fillMaxWidth().height(95.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+
+        // КНОПКА КОРРЕКТИРОВКА
+        Box(modifier = Modifier.offset(x = 1307.dp, y = 685.dp)) {
+            AnimatedGameButton(
+                painter = painterResource("adjustment.png"),
+                onClick = { /* Сюда добавим окно корректировки позже */ },
+                modifier = Modifier.size(width = 456.dp, height = 95.dp),
+                contentScale = ContentScale.Fit
             )
         }
-        Image(
-            painter = painterResource("adjustment.png"),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(width = 456.dp, height = 95.dp)
-                .offset(x=1307.dp, y=685.dp)
-                .clickable {
-                })
-        Image(
-            painter = painterResource("continuematch.png"),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
 
-            modifier = Modifier.size(width = 456.dp, height = 95.dp)
-                .offset(x=1307.dp, y=805.dp)
-                .clickable {
-                })
+        // ГЛАВНАЯ КНОПКА (Старт/Стоп/Продолжить)
+        Box(modifier = Modifier.offset(x = 1307.dp, y = 805.dp)) {
+            AnimatedGameButton(
+                painter = currentBtnImage,
+                onClick = { currentBtnAction() },
+                modifier = Modifier.size(width = 456.dp, height = 95.dp),
+                contentScale = ContentScale.FillBounds
+            )
+        }
+
+        // ПЛАШКА ОШИБКИ
+        errorMsg?.let { msg ->
+            Box(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
+                    .background(Color(0xCCB00020), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text(msg, color = Color.White, fontSize = 16.sp)
+            }
+        }
     }
 }
 
-//маленькая карточка матча
+@Composable
+fun ScorePad(
+    logo1: ImageBitmap?, // 👈 ДОБАВИЛИ
+    logo2: ImageBitmap?, // 👈 ДОБАВИЛИ
+    name1: String,
+    name2: String,
+    score1: Int,
+    score2: Int,
+    currentSet: Int,
+    onAddPoint1: () -> Unit,
+    onAddPoint2: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.width(900.dp)
+        .height(190.dp), contentAlignment = Alignment.TopCenter) {
+
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White,
+            shadowElevation = 8.dp,
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // --- ИГРОК 1 ---
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Аватарка
+                    Box(
+                        modifier = Modifier.size(45.dp).clip(CircleShape).background(Color(0xFFE0E0E0)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (logo1 != null) {
+                            Image(bitmap = logo1, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = name1,
+                        color = Color(0xFF2979FF),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AnimatedPlusOneButton(onClick = onAddPoint1)
+
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFE3F2FD), RoundedCornerShape(50))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(String.format("%02d", score1), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFF0F0F0)))
+
+                // --- ИГРОК 2 ---
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Аватарка
+                    Box(
+                        modifier = Modifier.size(45.dp).clip(CircleShape).background(Color(0xFFE0E0E0)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (logo2 != null) {
+                            Image(bitmap = logo2, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = name2,
+                        color = Color(0xFF2979FF),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AnimatedPlusOneButton(onClick = onAddPoint2)
+
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFE3F2FD), RoundedCornerShape(50))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(String.format("%02d", score2), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Плашка "ПАРТИЯ X"
+        Box(
+            modifier = Modifier
+                .background(Color(0xFFE3F2FD), RoundedCornerShape(50))
+                .padding(horizontal = 20.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "ПАРТИЯ $currentSet",
+                color = Color(0xFF2979FF),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+// 👇 НОВАЯ ФУНКЦИЯ ДЛЯ АНИМАЦИИ ТЕКСТОВОЙ КНОПКИ +1
+@Composable
+fun AnimatedPlusOneButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Анимация пружины
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.85f else 1f, // Уменьшается до 85% при нажатии
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "plus_one_scale"
+    )
+
+    Box(
+        modifier = Modifier
+            .scale(scale) // 👈 Применяем анимацию
+            .background(Color(0xFF66BB6A), RoundedCornerShape(50))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null, // Убираем стандартную волну, оставляем только пружину
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Text("+1", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    }
+}
+
+@Composable
+fun AnimatedGameButton(
+    painter: Painter, onClick: () -> Unit, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Fit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f, // Вдавливание при клике
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium
+        ), label = "scale_game"
+    )
+
+    Image(
+        painter = painter,
+        contentDescription = null,
+        contentScale = contentScale,
+        modifier = modifier.scale(scale).clickable(
+                interactionSource = interactionSource, indication = null, onClick = onClick
+            )
+    )
+}
+
+// ============ КАРТОЧКА МАТЧА ============
 @Composable
 fun MatchCard(
     logo1: ImageBitmap?,
@@ -528,30 +784,28 @@ fun MatchCard(
     isFinished: Boolean,
     score1: Int,
     score2: Int,
+    tennisPoints: List<String>? = null,
+    onAddPoint1: () -> Unit = {},
+    onAddPoint2: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = Color.White,
         shadowElevation = 15.dp,
-        modifier = modifier.width(440.dp) // Ширина карточки
+        modifier = modifier.width(440.dp)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- ИГРОК 1 ---
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
             ) {
-                // Аватарка
                 Box(
-                    modifier = Modifier
-                        .size(60.dp) // 👈 Большая аватарка
-                        .clip(CircleShape)
+                    modifier = Modifier.size(60.dp).clip(CircleShape)
                         .background(if (logo1 != null) Color.Transparent else Color(0xFFE0E0E0))
-                ) {
+                        .clickable { onAddPoint1() }) {
                     if (logo1 != null) {
                         Image(
                             bitmap = logo1,
@@ -562,44 +816,49 @@ fun MatchCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(16.dp)) // Отступ между аватаркой и текстом
+                Spacer(modifier = Modifier.width(16.dp))
 
-                // Имя
                 Text(
                     text = name1,
-                    color = Color(0xFF2979FF), // Твой синий цвет
+                    color = Color(0xFF2979FF),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
 
-                // Очки
                 Box(
-                    modifier = Modifier
-                        .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
+                    modifier = Modifier.background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text("$score1", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
-            // Разделитель
+            if (tennisPoints != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "${tennisPoints.getOrElse(0) { "" }} : ${tennisPoints.getOrElse(1) { "" }}",
+                        color = Color(0xFF1976D2),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 22.sp
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFEEEEEE)))
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- ИГРОК 2 ---
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
             ) {
-                // Аватарка
                 Box(
-                    modifier = Modifier
-                        .size(60.dp) // 👈 Большая аватарка
-                        .clip(CircleShape)
+                    modifier = Modifier.size(60.dp).clip(CircleShape)
                         .background(if (logo2 != null) Color.Transparent else Color(0xFFE0E0E0))
-                ) {
+                        .clickable { onAddPoint2() }) {
                     if (logo2 != null) {
                         Image(
                             bitmap = logo2,
@@ -612,7 +871,6 @@ fun MatchCard(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Имя
                 Text(
                     text = name2,
                     color = Color(0xFF2979FF),
@@ -621,10 +879,8 @@ fun MatchCard(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Очки
                 Box(
-                    modifier = Modifier
-                        .background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
+                    modifier = Modifier.background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text("$score2", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -633,20 +889,14 @@ fun MatchCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // --- СТАТУС ---
             Box(
-                modifier = Modifier
-                    .background(
-                        color = if (isFinished) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
-                        shape = RoundedCornerShape(50)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.background(
+                        color = if (isFinished) Color(0xFFFFEBEE) else Color(0xFFE8F5E9), shape = RoundedCornerShape(50)
+                    ).padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
+                        modifier = Modifier.size(10.dp).clip(CircleShape)
                             .background(if (isFinished) Color.Red else Color(0xFF4CAF50))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -662,9 +912,17 @@ fun MatchCard(
     }
 }
 
-// ============ ЭКРАН ТАБЛО (ВТОРОЕ ОКНО) ============
+// ============ ЭКРАН ТАБЛО ============
 @Composable
 fun AudienceScreen(match: MatchState) {
+    var live by remember { mutableStateOf(match) }
+    var ticker by remember { mutableStateOf("") }
+
+    DisposableEffect(Unit) {
+        ApiClient.connectScoreWs(onScore = { r -> live = MatchState.fromResponse(r) }, onText = { t -> ticker = t })
+        onDispose { ApiClient.disconnectWs() }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource("backgroundaudencscreen.png"),
@@ -672,5 +930,39 @@ fun AudienceScreen(match: MatchState) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+
+        Column(
+            modifier = Modifier.fillMaxSize().padding(60.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(80.dp), verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(live.team1, color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "${live.score1} : ${live.score2}",
+                    color = Color.White,
+                    fontSize = 96.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Text(live.team2, color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
+            }
+
+            live.tennisPointsDisplay?.let { pts ->
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    "${pts.getOrElse(0) { "" }} : ${pts.getOrElse(1) { "" }}",
+                    color = Color.Yellow,
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            if (ticker.isNotBlank()) {
+                Spacer(modifier = Modifier.height(40.dp))
+                Text(ticker, color = Color.White, fontSize = 32.sp)
+            }
+        }
     }
 }
