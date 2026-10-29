@@ -470,7 +470,7 @@ fun VoleyballScreen(
             currentSet = match.currentSet,
             onAddPoint1 = { ApiClient.addPoint(0, apply) { errorMsg = it } },
             onAddPoint2 = { ApiClient.addPoint(1, apply) { errorMsg = it } },
-            modifier = Modifier.offset(x = 200.dp, y = 800.dp)
+            modifier = Modifier.offset(x = 110.dp, y = 800.dp)
         )
         // ВЕРХНЯЯ ПАНЕЛЬ (Таймер, настройки, назад)
         // ВЕРХНЯЯ ПАНЕЛЬ (Таймер, настройки, назад)
@@ -523,7 +523,7 @@ fun VoleyballScreen(
             logo2,
             name2.ifBlank { "Игрок 2" },
             statusText = when (match.status) {
-                "FINISHED" -> "Завершено"; "NOT_STARTED" -> "Не начат"; else -> "В игре"
+                "FINISHED" -> "Завершено"; "NOT_STARTED" -> "Не начато"; else -> "В игре"
             },
             isFinished = match.finished,
             score1 = match.score1,
@@ -609,7 +609,7 @@ fun ScorePad(
     onAddPoint2: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.width(900.dp)
+    Box(modifier = modifier.width(1100.dp)
         .height(190.dp), contentAlignment = Alignment.TopCenter) {
 
         Surface(
@@ -889,20 +889,39 @@ fun MatchCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // 👇 ЛОГИКА ЦВЕТОВ ДЛЯ СТАТУСА
+            // Определяем цвета в зависимости от статуса матча
+            val statusColor = when (statusText) {
+                "Не начато" -> Color(0xFF9E9E9E)   // Серый
+                "Завершено" -> Color.Red          // Красный
+                else -> Color(0xFF4CAF50)         // Зеленый (В игре)
+            }
+
+            val statusBgColor = when (statusText) {
+                "Не начато" -> Color(0xFFF5F5F5)   // Светло-серый фон
+                "Завершено" -> Color(0xFFFFEBEE)  // Светло-красный фон
+                else -> Color(0xFFE8F5E9)         // Светло-зеленый фон
+            }
+
+            // Отрисовка плашки статуса
             Box(
-                modifier = Modifier.background(
-                        color = if (isFinished) Color(0xFFFFEBEE) else Color(0xFFE8F5E9), shape = RoundedCornerShape(50)
-                    ).padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier
+                    .background(statusBgColor, RoundedCornerShape(50))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Точка
                     Box(
-                        modifier = Modifier.size(10.dp).clip(CircleShape)
-                            .background(if (isFinished) Color.Red else Color(0xFF4CAF50))
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
+                    // Текст
                     Text(
                         text = statusText,
-                        color = if (isFinished) Color.Red else Color(0xFF4CAF50),
+                        color = statusColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
